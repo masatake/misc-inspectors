@@ -1,0 +1,215 @@
+#!/bin/bash
+#
+# lsdbus - list dbus related objects
+#
+# Copyright (C) 2013 Red Hat, Inc.
+#
+# Author: Masatake YAMATO <yamato@redhat.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SUBCOMMANDS="clients activatables"
+SERVICE_DEF_DIR=/usr/share/dbus-1
+
+readonly bus_service=org.freedesktop.DBus
+
+print_help()
+{
+    local scmd;
+
+    printf "Usage:"
+    printf "	$0 --help|-h\n"
+    for scmd in $SUBCOMMANDS; do
+	${scmd}_help $scmd
+    done
+    exit $1
+}
+
+activatables_help()
+{
+    printf "	$0 $1 [--session|--system] [--show-only-inactive]\n"
+    printf "           (default: --system)\n"
+
+    if [[ -n "$2" ]]; then
+	exit $2
+    fi
+}
+
+activatables_list()
+{
+    local self="$1"
+    shift
+
+    local bus="--system"
+    local activatable
+    local pid
+    local f
+    local show_only_inactive=
+
+    while [[ $# -gt 0 ]]; do
+	case $1 in
+	    help|--help|-h)
+		${self}_help ${self} 0
+		;;
+	    --session)
+		bus="--session"
+		;;
+	    --system)
+		bus="--system"
+		;;	    
+	    --show-only-inactive)
+		show_only_inactive=1
+		;;
+	    --*|-*)
+		printf "Unknown option: %s\n" $1 1>&2
+		print_help 1 1>&2
+		;;
+	    *)
+		printf "Unknown argument: %s\n" $1 1>&2
+		print_help 1 1>&2
+		;;	    
+	esac
+	shift
+    done
+    while read activatable; do
+	pid=$(pid_for "$bus" "${activatable}")
+	if [[ -n "$pid" && -n "$show_only_inactive" ]]; then
+	    continue
+	fi
+	printf "%s\n" $activatable
+	
+	for f in $(find /usr/share/dbus-1 -name *.service -type f -exec grep -l -e "$activatable" {} +); do
+	    printf "	"
+	    grep Exec= $f
+	done
+    done < <(dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / ${bus_service}.ListActivatableNames \
+	| sed -n -e 's/[ \t]\+string "\(.*\)"/\1/p')
+}
+
+clients_help()
+{
+    printf "	$0 $1 [--session|--system] [--show-bus-id]\n"
+    printf "           (default: --system)\n"
+
+    if [[ -n "$2" ]]; then
+	exit $2
+    fi
+}
+
+clients_list()
+{
+    local self="$1"
+    shift
+
+    local bus="--system"
+    local client
+    local pid
+    local show_bus_id
+
+    while [[ $# -gt 0 ]]; do
+	case $1 in
+	    help|--help|-h)
+		${self}_help ${self} 0
+		;;
+	    --session)
+		bus="--session"
+		;;
+	    --system)
+		bus="--system"
+		;;	    
+	    --show-bus-id)
+		show_bus_id=1
+		;;
+	    --*|-*)
+		printf "Unknown option: %s\n" $1 1>&2
+		print_help 1 1>&2
+		;;
+	    *)
+		printf "Unknown argument: %s\n" $1 1>&2
+		print_help 1 1>&2
+		;;	    
+	esac
+	shift
+    done
+
+    printf "# %38s - %5s - %s\n" "BUS NAME" "PID" "EXECUTABLE"
+    while read client; do
+	if [[ -z "$show_bus_id" && ${client:0:1} = ":" ]]; then
+	    continue
+	fi
+	pid=$(pid_for "$bus" "${client}") 
+
+	if [[ -n $pid ]]; then
+	    printf "%40s - %5d - %s\n" "$client" "$pid" $(readlink /proc/$pid/exe)
+	else
+	    printf "%40s - ????? - ?\n" "$client"
+	fi
+    done < <(dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / ${bus_service}.ListNames \
+	| sed -n -e 's/[ \t]\+string "\(.*\)"/\1/p')
+}
+
+
+pid_for()
+{
+    local bus=$1
+    local client=$2
+
+    dbus-send $bus \
+	--dest=${bus_service} \
+	--type=method_call \
+	--print-reply /  \
+	${bus_service}.GetConnectionUnixProcessID string:"$client" \
+	2>/dev/null | sed -n -e 's/[ \t]\+uint32 \([0-9]\+\)/\1/p'
+    return $?
+}
+
+func_p()
+{
+    type "$1" 2> /dev/null | grep -q "$1 is a function"
+}
+
+main()
+{
+    while [[ $# -gt 0 ]]; do
+	case $1 in
+	    --help|-h)
+		print_help 0
+		;;
+	    --*|-*)
+		printf "Unknown option: %s\n" $1 1>&2
+		print_help 1 1>&2
+		;;
+	    *)
+		break
+		;;
+	esac
+	shift
+    done
+
+    if [[ -z $1 ]]; then
+	printf "No subcommand given\n" 1 1>&2
+	print_help 1 1>&2
+    fi
+
+    if func_p $1_list; then
+	$1_list "$@"
+    else
+	printf "Unknown subcommand: %s\n" $1 1>&2
+	print_help 1 1>&2
+    fi
+    return $?
+}
+
+main "$@"
