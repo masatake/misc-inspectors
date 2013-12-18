@@ -20,8 +20,12 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+
 SUBCOMMANDS="clients activatables"
 SERVICE_DEF_DIR=/usr/share/dbus-1
+
+# The output of type may be translated. 
+LANG=C
 
 readonly bus_service=org.freedesktop.DBus
 
