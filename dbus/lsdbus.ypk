@@ -1,7 +1,9 @@
 (ypack-name "lsdbus")
-(ypack-version "0.0.0")
+(ypack-version "0.0.1")
 (ypack-require "dbus")
 (ypack-require "bash")
 (ypack-require "sed")
 (ypack-require "grep")
 (ypack-entry "lsdbus" "/usr/bin/lsdbus")
+(ypack-url "https://github.com/masatake/misc-inspectors")
+
