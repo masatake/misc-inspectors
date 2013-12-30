@@ -1,0 +1,8 @@
+(ypack-name "lspipe")
+(ypack-version "0.0.1")
+(ypack-require "bash")
+(ypack-require "sed")
+(ypack-require "coreutils")
+(ypack-entry "lspipe" "/usr/bin/lspipe")
+(ypack-url "https://github.com/masatake/misc-inspectors")
+
