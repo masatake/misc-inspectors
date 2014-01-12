@@ -1,0 +1,7 @@
+(ypack-name "lsunixsock")
+(ypack-version "0.0.0")
+(ypack-require "bash")
+(ypack-require "coreutils")
+(ypack-entry "lsunixsock" "/usr/bin/lsunixsock")
+(ypack-url "https://github.com/masatake/misc-inspectors")
+

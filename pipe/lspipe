@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# lspipe - list pipes and processes associated with them
+# lspipe - list pipes and related processes
 #
 # Copyright (C) 2013 Red Hat, Inc.
 #

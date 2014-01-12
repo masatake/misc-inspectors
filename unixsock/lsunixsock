@@ -1,0 +1,193 @@
+#!/bin/bash
+#
+# lsunixsock - list pipes and related processes
+#
+# Copyright (C) 2014 Red Hat, Inc.
+#
+# Author: Masatake YAMATO <yamato@redhat.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+declare -A netids
+declare -A states
+declare -A rectqs
+declare -A sendqs
+declare -A laddrs
+declare -A paddrs
+declare -A pports
+lports=
+declare -A ptol
+
+declare -A pids
+
+declare -A nums
+# declare -A refcounts
+# declare -A protocols
+# declare -A flagss
+# declare -A types
+# declare -A sts
+# declare -A paths
+
+member()
+{
+    local a=$1
+    local b
+    shift
+
+    for b in "$@"; do
+	if [[ $b = $a ]]; then
+	    return 0
+	fi
+    done
+    return 1
+}
+
+scan_ss()
+{
+    local netid state 
+    local rectq sendq 
+    local laddr lport
+    local paddr pport
+
+    while read netid state rectq sendq laddr lport paddr pport; do
+	lports="$lports $lport"
+	ptol[$pport]=$lport
+
+	if [[ $netid = u_str ]]; then
+	    netid=STREAM
+	elif [[ $netid = u_dgr ]]; then
+	    netid=DGRAM
+	elif [[ $netid = u_seq ]]; then
+	    netid=SEQPACKET
+	fi
+
+	netids[$lport]=$netid
+	states[$lport]=$state
+	rectqs[$lport]=$rectq
+	sendqs[$lport]=$sendq
+	laddrs[$lport]=$laddr
+	paddrs[$lport]=$paddr
+	pports[$lport]=$pport
+    done < <( ss -x -a | grep -v ^Netid )
+}
+
+scan_tasks()
+{
+    local process_file
+    local pid
+    local socket_file
+    local socket_inode
+    local l r w fd
+
+    for process_file in /proc/[0-9]*; do
+	pid=${process_file##*/}
+	for socket_file in $process_file/fd/*; do
+	    if [[ ! -e $socket_file ]]; then
+		continue
+	    fi
+	    if [[ "$(readlink $socket_file)" =~ ^socket:\[([0-9]+)\] ]]; then
+		socket_inode=${BASH_REMATCH[1]}
+
+		if ! member $socket_inode $lports; then
+		    continue
+		fi
+
+		pids[$socket_inode]="${pids[$socket_inode]} $pid:${socket_file##*/} "
+	    fi
+	done
+    done
+}
+
+print_inode()
+{
+    local inode=$1
+    local p
+    local pid
+    local fd
+    local exe
+    printf "	%s: \n" $inode
+    
+    printf "		procs: "
+    for p in  ${pids[$inode]}; do
+	pid=${p%:*}
+	exe=$(readlink /proc/$pid/exe)
+	printf "%s(%s) " ${exe##*/} $p
+    done
+    printf "\n"
+
+    # printf "		netid: %s\n" ${netids[$inode]}
+    printf "		state: %s\n" ${states[$inode]}
+    printf "		rq/sq: %s/%s\n" ${rectqs[$inode]} ${sendqs[$inode]}
+    printf "		sock: 0x%s\n" ${nums[$inode]}
+
+}
+
+
+scan_proc()
+{
+    local num refcount protocol flags type st inode path
+    while read num refcount protocol flags type st inode path; do
+	nums[$inode]=$num
+    done < <(grep -v '^Num' /proc/net/unix )
+}
+
+main()
+{
+    local l
+    local L R 
+    local P
+    local printed
+
+    
+    scan_ss
+    scan_proc
+    scan_tasks
+
+    for l in $lports; do
+	if member $l $printed; then
+	    continue
+	fi
+
+	if [[ $l -lt ${pports[$l]} ]]; then
+	    L=$l
+	    R=${pports[$l]}
+	else
+	    L=${pports[$l]}
+	    R=$l
+	fi
+
+	if [[ $L = 0 ]]; then
+	    printf "%s(%s, %s)\n" $R ${netids[$R]} "${laddrs[$R]}"
+
+	    print_inode $R
+	elif [[ $R = 0 ]]; then
+	    printf "%s(%s, %s)\n" $L ${netids[$L]} "${laddrs[$L]}"
+	    print_inode $L
+	else
+	    local path="${laddrs[$L]}"
+	    if [[ $path = '*' ]]; then
+		path="${laddrs[$R]}"
+	    fi
+
+	    printf "%s <=> %s(%s, %s)\n" $L $R ${netids[$L]} "$path"
+	    print_inode $L
+	    print_inode $R
+	fi
+
+	printed="$printed $l ${pports[$l]} "
+    done
+}
+
+main
