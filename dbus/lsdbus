@@ -20,43 +20,600 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-
-SUBCOMMANDS="clients activatables"
+# methods, signals, properties
+SUBCOMMANDS="examples clients activatables busnames objects interfaces methods signals properties"
 SERVICE_DEF_DIR=/usr/share/dbus-1
 
-# The output of type may be translated. 
+# TODO
+# bash ./lsdbus objects org.bluez
+# dbus-send --system --dest=org.bluez --type=method_call --print-reply / org.freedesktop.DBus.Introspectable.Introspect
+
+# The output of type may be translated.
 LANG=C
 
 readonly bus_service=org.freedesktop.DBus
 
+normalize_introspection_xml()
+{
+    sed -n -e '/string "/,$p' | sed -e '1 { s/.*string "// }' -e '$ { s/"$// }' \
+	| xmllint --format - 2> /dev/null
+}
+
 print_help()
 {
     local scmd;
+    local func
 
     printf "Usage:"
-    printf "	$0 --help|-h\n"
-    for scmd in $SUBCOMMANDS; do
-	${scmd}_help $scmd
+    for scmd in help $SUBCOMMANDS; do
+	func=${scmd}_help
+	if func_p $func; then
+	    $func $scmd
+	fi
     done
     exit $1
 }
 
-activatables_help()
+help_help()
 {
-    printf "	$0 $1 [--session|--system] [--show-only-inactive]\n"
-    printf "           (default: --system)\n"
+    printf "	$0 --help|-h\n"
+}
+
+help_list()
+{
+    print_help
+}
+
+cdr()
+{
+    shift
+    echo "$@"
+}
+
+member()
+{
+    local elt=$1
+    shift
+    local x
+
+    for x in "$@"; do
+	if [[ "$x" = "$elt" ]]; then
+	    return 0
+	fi
+    done
+    return 1
+}
+
+examples_help()
+{
+    printf "	$0 examples [$(tr ' ' '|' <<<$(cdr $SUBCOMMANDS))]\n"
+}
+
+examples_list()
+{
+    local self="$1"
+    shift
+
+    local target="$1"
+    shift
+
+    if [[ -n "${target}" ]]; then
+	if ! member "$target" $SUBCOMMANDS; then
+	    printf "No such target: %s\n" $target 1>&2
+	    print_help 1 1>&2
+	else
+	    SUBCOMMANDS=${target}
+	fi
+    fi
+
+    printf "Exampls:\n"
+    for scmd in $SUBCOMMANDS; do
+	func=${scmd}_printeg
+	if func_p $func; then
+	    printf "[%s]\n" $scmd
+	    $func $scmd
+	fi
+    done
+}
+
+properties_help()
+{
+    printf "	$0 $1 [--session|--system] BUSNAME OBJECTPATH INTERFACE\n"
 
     if [[ -n "$2" ]]; then
 	exit $2
     fi
 }
 
+properties_printeg()
+{
+    cat <<"EOF"
+	$ lsdbus properties org.fedoraproject.FirewallD1  /org/fedoraproject/FirewallD1 org.fedoraproject.FirewallD1.policies
+	LockdownDisabled
+	LockdownEnabled
+	LockdownWhitelistContextAdded
+	LockdownWhitelistUidAdded
+	...
+EOF
+}
+
+# TODO: Merge code with methods_list
+properties_list()
+{
+    local self="$1"
+    shift
+
+    local bus="--system"
+    local busname=
+    local path=
+    local iface=
+
+    while [[ $# -gt 0 ]]; do
+	case $1 in
+	    help|--help|-h)
+		${self}_help ${self} 0
+		;;
+	    --session)
+		bus="--session"
+		;;
+	    --system)
+		bus="--system"
+		;;
+	    --*|-*)
+		printf "Unknown option: %s\n" $1 1>&2
+		print_help 1 1>&2
+		;;
+	    *)
+		if [[ -n "$busname" ]]; then
+		    printf "Too many argument\n" $1 1>&2
+		    print_help 1 1>&2
+		fi
+		busname=$1
+		shift
+		path=$1
+		shift
+		iface=$1
+		shift
+		;;
+	esac
+	shift
+    done
+
+    if [[ -z "$busname" || -z "$path"  || -z "$iface" ]]; then
+	printf "Too few argument\n" $1 1>&2
+	print_help 1 1>&2
+    fi
+
+    dbus-send --system --dest=$busname --type=method_call --print-reply \
+	${path} ${bus_service}.Introspectable.Introspect \
+	| normalize_introspection_xml \
+	| xmllint --xpath "//interface[@name='$iface']/property/@name" -  2>/dev/null \
+	| xargs -n 1 echo \
+	| sed -n -e 's/name=\(.*\)/\1/p'
+}
+
+signals_help()
+{
+    printf "	$0 $1 [--session|--system] BUSNAME OBJECTPATH INTERFACE\n"
+
+    if [[ -n "$2" ]]; then
+	exit $2
+    fi
+}
+
+signals_printeg()
+{
+    cat <<"EOF"
+	$ lsdbus signals org.fedoraproject.FirewallD1  /org/fedoraproject/FirewallD1 org.fedoraproject.FirewallD1.policies
+	LockdownDisabled
+	LockdownEnabled
+	LockdownWhitelistContextAdded
+	LockdownWhitelistUidAdded
+	...
+EOF
+}
+
+# TODO: Merge code with methods_list
+signals_list()
+{
+    local self="$1"
+    shift
+
+    local bus="--system"
+    local busname=
+    local path=
+    local iface=
+
+    while [[ $# -gt 0 ]]; do
+	case $1 in
+	    help|--help|-h)
+		${self}_help ${self} 0
+		;;
+	    --session)
+		bus="--session"
+		;;
+	    --system)
+		bus="--system"
+		;;
+	    --*|-*)
+		printf "Unknown option: %s\n" $1 1>&2
+		print_help 1 1>&2
+		;;
+	    *)
+		if [[ -n "$busname" ]]; then
+		    printf "Too many argument\n" $1 1>&2
+		    print_help 1 1>&2
+		fi
+		busname=$1
+		shift
+		path=$1
+		shift
+		iface=$1
+		shift
+		;;
+	esac
+	shift
+    done
+
+    if [[ -z "$busname" || -z "$path"  || -z "$iface" ]]; then
+	printf "Too few argument\n" $1 1>&2
+	print_help 1 1>&2
+    fi
+
+    dbus-send --system --dest=$busname --type=method_call --print-reply \
+	${path} ${bus_service}.Introspectable.Introspect \
+	| normalize_introspection_xml \
+	| xmllint --xpath "//interface[@name='$iface']/signal/@name" -  2> /dev/null \
+	| xargs -n 1 echo \
+	| sed -n -e 's/name=\(.*\)/\1/p'
+}
+
+methods_help()
+{
+    printf "	$0 $1 [--session|--system] BUSNAME OBJECTPATH INTERFACE\n"
+
+    if [[ -n "$2" ]]; then
+	exit $2
+    fi
+}
+
+methods_printeg()
+{
+    cat <<"EOF"
+	$ lsdbus methods org.fedoraproject.FirewallD1  /org/fedoraproject/FirewallD1 org.fedoraproject.FirewallD1.policies
+	addLockdownWhitelistContext
+	getLockdownWhitelistCommands
+	removeLockdownWhitelistCommand
+	addLockdownWhitelistUser
+	...
+EOF
+}
+
+methods_list()
+{
+    local self="$1"
+    shift
+
+    local bus="--system"
+    local busname=
+    local path=
+    local iface=
+
+    while [[ $# -gt 0 ]]; do
+	case $1 in
+	    help|--help|-h)
+		${self}_help ${self} 0
+		;;
+	    --session)
+		bus="--session"
+		;;
+	    --system)
+		bus="--system"
+		;;
+	    --*|-*)
+		printf "Unknown option: %s\n" $1 1>&2
+		print_help 1 1>&2
+		;;
+	    *)
+		if [[ -n "$busname" ]]; then
+		    printf "Too many argument\n" $1 1>&2
+		    print_help 1 1>&2
+		fi
+		busname=$1
+		shift
+		path=$1
+		shift
+		iface=$1
+		shift
+		;;
+	esac
+	shift
+    done
+
+    if [[ -z "$busname" || -z "$path"  || -z "$iface" ]]; then
+	printf "Too few argument\n" $1 1>&2
+	print_help 1 1>&2
+    fi
+
+    dbus-send --system --dest=$busname --type=method_call --print-reply \
+	${path} ${bus_service}.Introspectable.Introspect \
+	| normalize_introspection_xml \
+	| xmllint --xpath "//interface[@name='$iface']/method/@name" -  \
+	| xargs -n 1 echo \
+	| sed -n -e 's/name=\(.*\)/\1/p'
+}
+
+interfaces_help()
+{
+    printf "	$0 $1 [--session|--system] BUSNAME OBJECTPATH\n"
+
+    if [[ -n "$2" ]]; then
+	exit $2
+    fi
+}
+
+interfaces_printeg()
+{
+    cat <<"EOF"
+	$ lsdbus interfaces org.bluez /
+	org.freedesktop.DBus.Introspectable
+	org.freedesktop.DBus.ObjectManager
+	...
+EOF
+}
+
+interfaces_list()
+{
+    local self="$1"
+    shift
+
+    local bus="--system"
+    local busname=
+    local path=
+
+    while [[ $# -gt 0 ]]; do
+	case $1 in
+	    help|--help|-h)
+		${self}_help ${self} 0
+		;;
+	    --session)
+		bus="--session"
+		;;
+	    --system)
+		bus="--system"
+		;;
+	    --*|-*)
+		printf "Unknown option: %s\n" $1 1>&2
+		print_help 1 1>&2
+		;;
+	    *)
+		if [[ -n "$busname" ]]; then
+		    printf "Too many argument\n" $1 1>&2
+		    print_help 1 1>&2
+		fi
+		busname=$1
+		shift
+		path=$1
+		shift
+		;;
+	esac
+	shift
+    done
+
+    if [[ -z "$busname" || -z "$path" ]]; then
+	printf "Too few argument\n" $1 1>&2
+	print_help 1 1>&2
+    fi
+
+    dbus-send --system --dest=$busname --type=method_call --print-reply \
+	${path} ${bus_service}.Introspectable.Introspect \
+	| normalize_introspection_xml \
+	| xmllint --xpath '//interface/@name' -  \
+	| xargs -n 1 echo \
+	| sed -n -e 's/name=\(.*\)/\1/p'
+}
+
+objects_help()
+{
+    printf "	$0 $1 [--session|--system] BUSNAME [OBJECTPATH]\n"
+
+    if [[ -n "$2" ]]; then
+	exit $2
+    fi
+}
+
+objects_printeg()
+{
+    cat <<"EOF"
+	$ lsdbus objects org.fedoraproject.FirewallD1
+	/org
+	/org/fedoraproject
+	/org/fedoraproject/FirewallD1
+	/org/fedoraproject/FirewallD1/config
+	/org/fedoraproject/FirewallD1/config/icmptype
+	/org/fedoraproject/FirewallD1/config/icmptype/0
+
+	$ lsdbus objects org.fedoraproject.FirewallD1 /org/fedoraproject/FirewallD1/config
+	/org/fedoraproject/FirewallD1/config/icmptype
+	/org/fedoraproject/FirewallD1/config/icmptype/0
+	/org/fedoraproject/FirewallD1/config/icmptype/1
+	...
+EOF
+}
+
+objects_list_for_path()
+{
+    local bus=$1
+    local busname=$2
+    local path=$3
+    local sep=/
+    local comp
+
+    while read comp; do
+	[[ "${path}" = / ]] && sep=
+	[[ "${path}" = "${comp}" ]] && break
+	echo ${path}${sep}$comp
+	objects_list_for_path $bus $busname ${path}${sep}$comp
+    done < <(
+        [[ -z "${path}" ]] && path=/;
+	dbus-send --system --dest=$busname --type=method_call --print-reply \
+	    ${path} ${bus_service}.Introspectable.Introspect 2>/dev/null \
+	    | normalize_introspection_xml \
+	    | xmllint --xpath '//node/@name' -  2>/dev/null \
+	    | xargs -n 1 echo \
+	    | sed -n -e 's/name=\(.*\)/\1/p'
+    )
+}
+
+objects_list()
+{
+    local self="$1"
+    shift
+
+    local bus="--system"
+    local busname=
+    local path=/
+
+    while [[ $# -gt 0 ]]; do
+	case $1 in
+	    help|--help|-h)
+		${self}_help ${self} 0
+		;;
+	    --session)
+		bus="--session"
+		;;
+	    --system)
+		bus="--system"
+		;;
+	    --*|-*)
+		printf "Unknown option: %s\n" $1 1>&2
+		print_help 1 1>&2
+		;;
+	    *)
+		if [[ -n "$busname" ]]; then
+		    path=$1
+		    shift
+		    break
+		else
+		    busname=$1
+		fi
+		;;
+	esac
+	shift
+    done
+
+    if [[ -z "$busname" ]]; then
+	printf "Too few argument\n" $1 1>&2
+	print_help 1 1>&2
+    fi
+
+    if [[ -n "$1" ]]; then
+	printf "Too many argument\n" $1 1>&2
+	print_help 1 1>&2
+    fi
+
+    objects_list_for_path $bus $busname $path
+}
+
+busnames_help()
+{
+    printf "	$0 $1 [--session|--system] [--show-bus-id]\n"
+
+    if [[ -n "$2" ]]; then
+	exit $2
+    fi
+}
+
+busnames_printeg()
+{
+    cat <<"EOF"
+	$ lsdbus  busnames
+	org.gnome.DisplayManager
+	org.freedesktop.systemd1
+	org.freedesktop.machine1
+	org.freedesktop.login1
+	org.freedesktop.UPower
+	org.freedesktop.UDisks2
+	...
+EOF
+}
+
+busnames_list()
+{
+    local self="$1"
+    shift
+
+    local show_bus_id
+    local bus="--system"
+
+    while [[ $# -gt 0 ]]; do
+	case $1 in
+	    help|--help|-h)
+		${self}_help ${self} 0
+		;;
+	    --session)
+		bus="--session"
+		;;
+	    --system)
+		bus="--system"
+		;;
+	    --show-bus-id)
+		show_bus_id=1
+		;;
+	    --*|-*)
+		printf "Unknown option: %s\n" $1 1>&2
+		print_help 1 1>&2
+		;;
+	    *)
+		printf "Unknown argument: %s\n" $1 1>&2
+		print_help 1 1>&2
+		;;
+	esac
+	shift
+    done
+
+    dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / ${bus_service}.ListNames \
+	| sed -n -e 's/[ \t]\+string "\(.*\)"/\1/p' \
+	| sort -n -r \
+	| {
+	if [[ -n "$show_bus_id" ]]; then
+	    cat
+	else
+	    grep -v '^:'
+	fi
+	}
+}
+
+activatables_help()
+{
+    printf "	$0 $1 [--session|--system] [--show-only-inactive]\n"
+
+    if [[ -n "$2" ]]; then
+	exit $2
+    fi
+}
+
+activatables_printeg()
+{
+    cat <<"EOF"
+	$ lsdbus activatables
+	org.freedesktop.DBus
+	org.freedesktop.GeoClue2
+		Service file: /usr/share/dbus-1/system-services/org.freedesktop.GeoClue2.service
+		Exec=/usr/libexec/geoclue -t 5
+	org.freedesktop.login1
+		Service file: /usr/share/dbus-1/system-services/org.freedesktop.login1.service
+		Exec=/bin/false
+	...
+EOF
+    }
 activatables_list()
 {
     local self="$1"
     shift
 
     local bus="--system"
+    local sdir
     local activatable
     local pid
     local f
@@ -72,7 +629,7 @@ activatables_list()
 		;;
 	    --system)
 		bus="--system"
-		;;	    
+		;;
 	    --show-only-inactive)
 		show_only_inactive=1
 		;;
@@ -83,18 +640,25 @@ activatables_list()
 	    *)
 		printf "Unknown argument: %s\n" $1 1>&2
 		print_help 1 1>&2
-		;;	    
+		;;
 	esac
 	shift
     done
+
+    if [[ $bus = "--system" ]]; then
+	sdir=system-services
+    else
+	sdir=services
+    fi
     while read activatable; do
 	pid=$(pid_for "$bus" "${activatable}")
 	if [[ -n "$pid" && -n "$show_only_inactive" ]]; then
 	    continue
 	fi
 	printf "%s\n" $activatable
-	
-	for f in $(find /usr/share/dbus-1 -name *.service -type f -exec grep -l -e "$activatable" {} +); do
+
+	for f in $(find ${SERVICE_DEF_DIR}/${sdir} -name "$activatable.service" -type f -exec grep -l -e "Name=$activatable" {} +); do
+	    printf "	Service file: %s\n" $f
 	    printf "	"
 	    grep Exec= $f
 	done
@@ -105,11 +669,25 @@ activatables_list()
 clients_help()
 {
     printf "	$0 $1 [--session|--system] [--show-bus-id]\n"
-    printf "           (default: --system)\n"
 
     if [[ -n "$2" ]]; then
 	exit $2
     fi
+}
+
+clients_printeg()
+{
+    cat <<"EOF"
+	$ bash  ./lsdbus clients
+	#                           BUS NAME -   PID - EXECUTABLE
+			org.freedesktop.DBus - ????? - ?
+		    org.freedesktop.systemd1 -     1 - /usr/lib/systemd/systemd
+		org.fedoraproject.FirewallD1 -   902 - /usr/bin/python2.7
+	      org.freedesktop.NetworkManager -  1323 - /usr/sbin/NetworkManager
+			 com.redhat.ifcfgrh1 -  1323 - /usr/sbin/NetworkManager
+                                                 ...
+EOF
+
 }
 
 clients_list()
@@ -132,7 +710,7 @@ clients_list()
 		;;
 	    --system)
 		bus="--system"
-		;;	    
+		;;
 	    --show-bus-id)
 		show_bus_id=1
 		;;
@@ -143,7 +721,7 @@ clients_list()
 	    *)
 		printf "Unknown argument: %s\n" $1 1>&2
 		print_help 1 1>&2
-		;;	    
+		;;
 	esac
 	shift
     done
@@ -153,7 +731,7 @@ clients_list()
 	if [[ -z "$show_bus_id" && ${client:0:1} = ":" ]]; then
 	    continue
 	fi
-	pid=$(pid_for "$bus" "${client}") 
+	pid=$(pid_for "$bus" "${client}")
 
 	if [[ -n $pid ]]; then
 	    printf "%40s - %5d - %s\n" "$client" "$pid" $(readlink /proc/$pid/exe)
