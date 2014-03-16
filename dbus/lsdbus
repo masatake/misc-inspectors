@@ -658,10 +658,12 @@ activatables_list()
 	printf "%s\n" $activatable
 
 	for f in $(find ${SERVICE_DEF_DIR}/${sdir} -name "$activatable.service" -type f -exec grep -l -e "Name=$activatable" {} +); do
-	    printf "	Service file: %s\n" $f
-	    printf "	"
-	    grep Exec= $f
-	    grep SystemdService= $f
+	    printf "	Service desc file: %s\n" $f
+	    printf "	%s\n" "$(grep Exec= $f)"
+	    local s=$(grep SystemdService= $f)
+	    if [[ -n "$s" ]]; then
+		printf "	%s\n" "$s"
+	    fi
 	done
     done < <(dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / ${bus_service}.ListActivatableNames \
 	| sed -n -e 's/[ \t]\+string "\(.*\)"/\1/p')
