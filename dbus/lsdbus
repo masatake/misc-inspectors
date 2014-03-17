@@ -21,7 +21,7 @@
 #
 
 # methods, signals, properties
-SUBCOMMANDS="examples clients activatables busnames objects interfaces methods signals properties"
+SUBCOMMANDS="examples connections activatables busnames objects interfaces methods signals properties"
 SERVICE_DEF_DIR=/usr/share/dbus-1
 
 # TODO
@@ -669,7 +669,7 @@ activatables_list()
 	| sed -n -e 's/[ \t]\+string "\(.*\)"/\1/p')
 }
 
-clients_help()
+connections_help()
 {
     printf "	$0 $1 [--session|--system] [--show-bus-id]\n"
 
@@ -678,10 +678,10 @@ clients_help()
     fi
 }
 
-clients_printeg()
+connections_printeg()
 {
     cat <<"EOF"
-	$ bash  ./lsdbus clients
+	$ bash  ./lsdbus connections
 	#                           BUS NAME -   PID - EXECUTABLE
 			org.freedesktop.DBus - ????? - ?
 		    org.freedesktop.systemd1 -     1 - /usr/lib/systemd/systemd
@@ -693,15 +693,15 @@ EOF
 
 }
 
-clients_list()
+connections_list()
 {
     local self="$1"
     shift
 
     local bus="--system"
-    local client
-    local client_id
-    local client_str
+    local connection
+    local connection_id
+    local connection_str
     local pid
     local show_bus_id
 
@@ -732,27 +732,27 @@ clients_list()
     done
 
     printf "# %38s - %5s - %s\n" "BUS NAME" "PID" "EXECUTABLE"
-    while read client; do
-	client_str=$client
-	if [[ ${client:0:1} = ":" ]]; then
+    while read connection; do
+	connection_str=$connection
+	if [[ ${connection:0:1} = ":" ]]; then
 	    if [[ -z "$show_bus_id" ]]; then
 		continue
 	    fi
 	else
-	    client_id=$(dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / \
-		                  ${bus_service}.GetNameOwner string:"${client}"  \
+	    connection_id=$(dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / \
+		                  ${bus_service}.GetNameOwner string:"${connection}"  \
 		        | sed -n 's/   string "\([^"]\+\)"/\1/p')
-	    if [[ $client_id != $client ]]; then
-		client_str="$client_id;$client"
+	    if [[ $connection_id != $connection ]]; then
+		connection_str="$connection_id;$connection"
 	    fi
 	fi
 
-	pid=$(pid_for "$bus" "${client}")
+	pid=$(pid_for "$bus" "${connection}")
 
 	if [[ -n $pid ]]; then
-	    printf "%40s - %5d - %s\n" "$client_str" "$pid" $(readlink /proc/$pid/exe)
+	    printf "%40s - %5d - %s\n" "$connection_str" "$pid" $(readlink /proc/$pid/exe)
 	else
-	    printf "%40s - ????? - ?\n" "$client_str"
+	    printf "%40s - ????? - ?\n" "$connection_str"
 	fi
     done < <(dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / ${bus_service}.ListNames \
 	| sed -n -e 's/[ \t]\+string "\(.*\)"/\1/p')
@@ -762,13 +762,13 @@ clients_list()
 pid_for()
 {
     local bus=$1
-    local client=$2
+    local connection=$2
 
     dbus-send $bus \
 	--dest=${bus_service} \
 	--type=method_call \
 	--print-reply /  \
-	${bus_service}.GetConnectionUnixProcessID string:"$client" \
+	${bus_service}.GetConnectionUnixProcessID string:"$connection" \
 	2>/dev/null | sed -n -e 's/[ \t]\+uint32 \([0-9]\+\)/\1/p'
     return $?
 }
