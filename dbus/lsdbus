@@ -700,6 +700,8 @@ clients_list()
 
     local bus="--system"
     local client
+    local client_id
+    local client_str
     local pid
     local show_bus_id
 
@@ -731,15 +733,26 @@ clients_list()
 
     printf "# %38s - %5s - %s\n" "BUS NAME" "PID" "EXECUTABLE"
     while read client; do
-	if [[ -z "$show_bus_id" && ${client:0:1} = ":" ]]; then
-	    continue
+	client_str=$client
+	if [[ ${client:0:1} = ":" ]]; then
+	    if [[ -z "$show_bus_id" ]]; then
+		continue
+	    fi
+	else
+	    client_id=$(dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / \
+		                  ${bus_service}.GetNameOwner string:"${client}"  \
+		        | sed -n 's/   string "\([^"]\+\)"/\1/p')
+	    if [[ $client_id != $client ]]; then
+		client_str="$client_id;$client"
+	    fi
 	fi
+
 	pid=$(pid_for "$bus" "${client}")
 
 	if [[ -n $pid ]]; then
-	    printf "%40s - %5d - %s\n" "$client" "$pid" $(readlink /proc/$pid/exe)
+	    printf "%40s - %5d - %s\n" "$client_str" "$pid" $(readlink /proc/$pid/exe)
 	else
-	    printf "%40s - ????? - ?\n" "$client"
+	    printf "%40s - ????? - ?\n" "$client_str"
 	fi
     done < <(dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / ${bus_service}.ListNames \
 	| sed -n -e 's/[ \t]\+string "\(.*\)"/\1/p')
