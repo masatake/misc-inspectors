@@ -731,7 +731,7 @@ connections_list()
 	shift
     done
 
-    printf "# %38s - %5s - %s\n" "BUS NAME" "PID" "EXECUTABLE"
+    printf "# %38s - %5s - %s\n" "BUS NAME" "PID" "CMDLINE"
     while read connection; do
 	connection_str=$connection
 	if [[ ${connection:0:1} = ":" ]]; then
@@ -750,7 +750,8 @@ connections_list()
 	pid=$(pid_for "$bus" "${connection}")
 
 	if [[ -n $pid ]]; then
-	    printf "%40s - %5d - %s\n" "$connection_str" "$pid" $(readlink /proc/$pid/exe)
+#	    printf "%40s - %5d - %s\n" "$connection_str" "$pid" $(readlink /proc/$pid/exe)
+	    printf "%40s - %5d - %s\n" "$connection_str" "$pid" "$(tr '\0' ' ' < /proc/$pid/cmdline | fold -w 40 | head -1)"
 	else
 	    printf "%40s - ????? - ?\n" "$connection_str"
 	fi
