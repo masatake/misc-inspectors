@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# lsdbus - list dbus related objects
+# lsdbus - list dbus related names and objects
 #
 # Copyright (C) 2013 Red Hat, Inc.
 #
@@ -21,7 +21,7 @@
 #
 
 # methods, signals, properties
-SUBCOMMANDS="examples connections activatables busnames objects interfaces methods signals properties"
+SUBCOMMANDS="examples processes activatables busnames objects interfaces methods signals properties"
 SERVICE_DEF_DIR=/usr/share/dbus-1
 
 # TODO
@@ -517,7 +517,7 @@ objects_list()
 
 busnames_help()
 {
-    printf "	$0 $1 [--session|--system] [--show-bus-id]\n"
+    printf "	$0 $1 [--session|--system] [--show-unique-connection-name|-u]\n"
 
     if [[ -n "$2" ]]; then
 	exit $2
@@ -543,7 +543,7 @@ busnames_list()
     local self="$1"
     shift
 
-    local show_bus_id
+    local show_unique_connection_name
     local bus="--system"
 
     while [[ $# -gt 0 ]]; do
@@ -557,8 +557,8 @@ busnames_list()
 	    --system)
 		bus="--system"
 		;;
-	    --show-bus-id)
-		show_bus_id=1
+	    --show-unique-connection-name|-u)
+		show_unique_connection_name=1
 		;;
 	    --*|-*)
 		printf "Unknown option: %s\n" $1 1>&2
@@ -576,7 +576,7 @@ busnames_list()
 	| sed -n -e 's/[ \t]\+string "\(.*\)"/\1/p' \
 	| sort -n -r \
 	| {
-	if [[ -n "$show_bus_id" ]]; then
+	if [[ -n "$show_unique_connection_name" ]]; then
 	    cat
 	else
 	    grep -v '^:'
@@ -669,35 +669,32 @@ activatables_list()
 	| sed -n -e 's/[ \t]\+string "\(.*\)"/\1/p')
 }
 
-connections_help()
+processes_help()
 {
-    printf "	$0 $1 [--session|--system] [--show-bus-id]\n"
+    printf "	$0 $1 [--session|--system] [--well-known-only|-w]\n"
 
     if [[ -n "$2" ]]; then
 	exit $2
     fi
 }
 
-connections_printeg()
+processes_printeg()
 {
     cat <<"EOF"
-	# lsdbus connections  --system 
+	# lsdbus processes  --system -w
 	#                               BUS NAME -   PID - CMDLINE
-	                    org.freedesktop.DBus - ????? - ?
-	           :1.6;org.freedesktop.systemd1 -     1 - /usr/lib/systemd/systemd --switched-root
-	       :1.1;org.fedoraproject.FirewallD1 -   902 - /usr/bin/python -Es /usr/sbin/firewalld 
-	     :1.9;org.freedesktop.NetworkManager -  1323 - /usr/sbin/NetworkManager --no-daemon 
-	                :1.9;com.redhat.ifcfgrh1 -  1323 - /usr/sbin/NetworkManager --no-daemon 
-	       :1.3;org.freedesktop.RealtimeKit1 -   905 - /usr/libexec/rtkit-daemon 
-	           :1.4;org.freedesktop.Accounts -   906 - /usr/libexec/accounts-daemon 
-	         :1.115;org.freedesktop.machine1 -  2972 - /usr/lib/systemd/systemd-machined 
-	      :1.4115;org.freedesktop.PolicyKit1 - 23480 - /usr/lib/polkit-1/polkitd --no-debug 
-	                         :1.12;org.bluez -  1356 - /usr/libexec/bluetooth/bluetoothd 
+	            org.freedesktop.systemd1:1.6 -     1 - /usr/lib/systemd/systemd --switched-root --system --deserialize 22 
+	        org.fedoraproject.FirewallD1:1.1 -   902 - /usr/bin/python -Es /usr/sbin/firewalld --nofork --nopid 
+	        org.freedesktop.RealtimeKit1:1.3 -   905 - /usr/libexec/rtkit-daemon 
+	            org.freedesktop.Accounts:1.4 -   906 - /usr/libexec/accounts-daemon 
+	               org.freedesktop.Avahi:1.7 -   986 - avahi-daemon: running [linux-4.local]
+                                                     ...
+
 EOF
 
 }
 
-connections_list()
+processes_list()
 {
     local self="$1"
     shift
@@ -707,7 +704,8 @@ connections_list()
     local connection_id
     local connection_str
     local pid
-    local show_bus_id
+    local well_known_only
+    local truncate="fold -w 40"
 
     while [[ $# -gt 0 ]]; do
 	case $1 in
@@ -720,8 +718,11 @@ connections_list()
 	    --system)
 		bus="--system"
 		;;
-	    --show-bus-id)
-		show_bus_id=1
+	    --well-known-only|-w)
+		well_known_only=1
+		;;
+	    --no-truncate|-T)
+		truncate=cat
 		;;
 	    --*|-*)
 		printf "Unknown option: %s\n" $1 1>&2
@@ -736,31 +737,34 @@ connections_list()
     done
 
     printf "# %38s - %5s - %s\n" "BUS NAME" "PID" "CMDLINE"
-    while read connection; do
-	connection_str=$connection
-	if [[ ${connection:0:1} = ":" ]]; then
-	    if [[ -z "$show_bus_id" ]]; then
-		continue
-	    fi
-	else
-	    connection_id=$(dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / \
-		                  ${bus_service}.GetNameOwner string:"${connection}"  \
-		        | sed -n 's/   string "\([^"]\+\)"/\1/p')
-	    if [[ $connection_id != $connection ]]; then
-		connection_str="$connection_id;$connection"
-	    fi
-	fi
 
-	pid=$(pid_for "$bus" "${connection}")
+    {
+	while read connection; do
+	    connection_str=$connection
+	    if [[ ${connection:0:1} = ":" ]]; then
+		if [[ -n "$well_known_only" ]]; then
+		    continue
+		fi
+	    else
+		connection_id=$(dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / \
+		    ${bus_service}.GetNameOwner string:"${connection}"  \
+		    | sed -n 's/   string "\([^"]\+\)"/\1/p')
+		if [[ $connection_id != $connection ]]; then
+		    connection_str="$connection$connection_id"
+		fi
+	    fi
 
-	if [[ -n $pid ]]; then
-#	    printf "%40s - %5d - %s\n" "$connection_str" "$pid" $(readlink /proc/$pid/exe)
-	    printf "%40s - %5d - %s\n" "$connection_str" "$pid" "$(tr '\0' ' ' < /proc/$pid/cmdline | fold -w 40 | head -1)"
-	else
-	    printf "%40s - ????? - ?\n" "$connection_str"
-	fi
-    done < <(dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / ${bus_service}.ListNames \
-	| sed -n -e 's/[ \t]\+string "\(.*\)"/\1/p')
+	    pid=$(pid_for "$bus" "${connection}")
+
+	    if [[ -n $pid ]]; then
+		#	    printf "%40s - %5d - %s\n" "$connection_str" "$pid" $(readlink /proc/$pid/exe)
+		printf "%40s - %5d - %s\n" "$connection_str" "$pid" "$(tr '\0' ' ' < /proc/$pid/cmdline | ${truncate} | head -1)"
+	    else
+		printf "%40s - ????? - ?\n" "$connection_str"
+	    fi
+	done < <(dbus-send $bus --dest=${bus_service} --type=method_call --print-reply / ${bus_service}.ListNames \
+	    | sed -n -e 's/[ \t]\+string "\(.*\)"/\1/p')
+    } | sort -k 3
 }
 
 
