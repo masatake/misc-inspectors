@@ -63,7 +63,7 @@ stat()
     done < /proc/net/softnet_stat
 }
 
-mian()
+main()
 {
     stat
 }
