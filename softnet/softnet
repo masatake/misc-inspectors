@@ -29,9 +29,23 @@ stat()
 	"received_rps" "flow_limit_count" 
 	"REST")
     declare -a line
+    declare -a tx
+    declare -a rx
     local i
     local s
     
+    while read -a line; do
+	if [[ ${line[0]} = "NET_TX:" ]]; then
+	    for (( i = 1; i < "${#line[@]}"; i++ )); do
+		tx[$((i - 1))]=${line[$i]}
+	    done
+	elif [[ ${line[0]} = "NET_RX:" ]]; then
+	    for (( i = 1; i < "${#line[@]}"; i++ )); do
+		rx[$((i - 1))]=${line[$i]}
+	    done
+	fi
+    done < /proc/softirqs
+
     for cpu in $(seq 0 $(( $(nproc) - 1))); do
 	read -a line
 	
@@ -39,6 +53,8 @@ stat()
 	    header_printed=done
 
 	    printf "%5s" cpu
+	    printf "%12s" tx
+	    printf "%12s" rx
 	    for (( i = 0; i < "${#header[@]}"; i++ )); do
 		if [[ -n "${line[$i]}" ]]; then
 		    s="${header[$i]}"
@@ -53,6 +69,8 @@ stat()
 	fi
 
 	printf "%5d" $cpu
+	printf "%12d" ${tx[$cpu]}
+	printf "%12s" ${rx[$cpu]}
 	for (( i = 0; i < "${#line[@]}"; i++ )); do
 	    s="${header[$i]}"
 	    if [[ ${s:0:1} != _ ]]; then
