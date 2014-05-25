@@ -24,16 +24,16 @@ stat()
 {
     local cpu
     local header_printed
-    declare -a header=("processed" "dropped" "time_squeeze" 
-	"_a" "_b" "_c" "_d" "_e" "cpu_collision" 
-	"received_rps" "flow_limit_count" 
+    declare -a header=("processed" "dropped" "time_squeeze"
+	"_a" "_b" "_c" "_d" "_e" "cpu_collision"
+	"received_rps" "flow_limit_count"
 	"REST")
     declare -a line
     declare -a tx
     declare -a rx
     local i
     local s
-    
+
     while read -a line; do
 	if [[ ${line[0]} = "NET_TX:" ]]; then
 	    for (( i = 1; i < "${#line[@]}"; i++ )); do
@@ -48,7 +48,7 @@ stat()
 
     for cpu in $(seq 0 $(( $(nproc) - 1))); do
 	read -a line
-	
+
 	if [[ -z "$header_printed" ]]; then
 	    header_printed=done
 
