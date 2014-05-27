@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# softnet - ...
+# softnet - show network related statistics of softirq
 #
 # Copyright (C) 2013 Red Hat, Inc.
 #

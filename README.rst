@@ -14,3 +14,5 @@ lsunixsock
 	list unix sockets and related processes
 	(This function should be merged into lsof)
 
+softnet
+	show network related statistics of softirq
