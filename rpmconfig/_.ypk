@@ -1,0 +1,6 @@
+(ypack-name "lsrpmconfig")
+(ypack-version "0.0.1")
+(ypack-require "rpm")
+(ypack-require "bash")
+(ypack-entry "lsrpmconfig" "/usr/bin/lsrpmconfig")
+(ypack-url "https://github.com/masatake/misc-inspectors")
