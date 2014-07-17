@@ -120,13 +120,9 @@ function printff
 {
     local conf_file=$1
     local flags=$2
-    local c
-
-    local missingok="          "
-    local noreplace="          "
-    local ghost="      "
 
     printf "%- 40s " "${conf_file}"
+
     # d: doc
     # c: config
     # s: specfile
@@ -136,18 +132,17 @@ function printff
     # l: license
     # r: readme
     
-    if [[ "${flags}" == *m* ]]; then
-	printf "missingok "
-    fi
-
-    if [[ "${flags}" == *n* ]]; then
-	printf "noreplace "
-    fi
-
-    if [[ "${flags}" == *g* ]]; then
-	printf "ghost "
-    fi
-
+    case "${flags}" in
+	*m*)
+	    printf "missingok "
+	    ;;&
+	*n*)
+	    printf "missingok "
+	    ;;&
+	*g*)
+	    printf "ghost "
+	    ;;&
+    esac
     return 0
 }
 
