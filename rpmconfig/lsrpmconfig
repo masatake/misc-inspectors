@@ -39,7 +39,9 @@ Usage:
 	    List configuration files and their attributes that are
 	    installed to the system. Here attributes are noreplace,
 	    missingok, and ghost. If package names are given, list
-	    only about the package names.
+	    only about the package names. Extra attributes NOTFOUND
+	    is added if a configuration file is not found on the
+	    system.
 
 	    If --print-package-name is given, package names are
 	    prepended to each line of output.
@@ -143,6 +145,7 @@ function printff
 	    printf "ghost "
 	    ;;&
     esac
+
     return 0
 }
 
@@ -198,6 +201,10 @@ function run_lsrpmconfig_for_name
 		fi
 		
 		printff "${file}" "${flags}"
+		if [[ ! -e "${conf_file}" ]]; then
+		    printf "NOTFOUND "
+		fi
+
 		if [[ -n "${backup_info_p}" ]]; then
 		    # TODO: "~" ".bak"
 		    for backup_suffix in ".rpmnew" ".rpmorig" ".rpmsave"; do
